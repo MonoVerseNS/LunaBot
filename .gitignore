@@ -1,0 +1,49 @@
+# --- env / secrets ---
+.env
+*.env
+!.env.example
+
+# --- telethon ---
+*.session
+*.session-journal
+data/
+*.db
+*.db-wal
+*.db-shm
+luna_session*
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- os / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- docker ---
+.docker/
+
+# --- logs ---
+*.log
+logs/

@@ -1,0 +1,21 @@
+services:
+  luna:
+    build: .
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    env_file: .env
+    environment:
+      SESSION_FILE: /app/data/luna_session
+      STATE_FILE: /app/data/luna_state.db
+    volumes:
+      - luna_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sqlite3, pathlib; pathlib.Path('/app/data/luna_state.db').exists() or exit(0)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  luna_data:
