@@ -432,26 +432,78 @@ class Safety:
         self.times.append(datetime.now())
 
 
+def _get_reply_id(msg) -> int | None:
+    """Надёжно достаёт reply_to_msg_id (Telethon хранит в reply_to)."""
+    if msg is None:
+        return None
+    # основной путь — reply_to.reply_to_msg_id (MessageReplyHeader)
+    rt = getattr(msg, "reply_to", None)
+    if rt is not None:
+        val = getattr(rt, "reply_to_msg_id", None)
+        if val:
+            return val
+    # фолбек — прямой атрибут/свойство
+    try:
+        val = getattr(msg, "reply_to_msg_id", None)
+        if val:
+            return val
+    except Exception:
+        pass
+    return None
+
+
+def _is_from_bot(msg, bot_id: int) -> bool:
+    """Проверка что сообщение от Луны (selfbot)."""
+    if msg is None:
+        return False
+    if getattr(msg, "out", False) is True:
+        # для selfbot все исходящие — от бота, но в Saved Messages и входящие тоже out=True,
+        # поэтому дополнительно сверяем sender_id когда он есть
+        sid = getattr(msg, "sender_id", None)
+        if sid is None or sid == bot_id:
+            return True
+    sid = getattr(msg, "sender_id", None)
+    if sid == bot_id:
+        return True
+    # фолбек через get_sender (редко нужен, но покрывает каналы)
+    return False
+
+
 # ------------------------------------------------------------------ thread context
 async def collect_thread(event, telegram, bot_id: int, cfg) -> tuple[list, bool]:
-    """Собирает цепочку по reply_to_msg_id от корня до текущего."""
+    """Собирает цепочку по reply_to от корня до текущего.
+    Условие треда: текущее сообщение — ответ на сообщение Луны (reply_to == bot)."""
     cur = event.message
-    reply_to = getattr(cur, "reply_to_msg_id", None)
+    reply_to = _get_reply_id(cur)
     if not reply_to:
+        log.debug("collect_thread: нет reply_to у %s (id=%s) — не тред", get_message_text(cur)[:40], cur.id)
         return [cur], False
     try:
         replied = await telegram.get_messages(event.chat_id, ids=reply_to)
-    except Exception:
+        # Telethon может вернуть список если ids был списком — нормализуем
+        if isinstance(replied, list):
+            replied = replied[0] if replied else None
+    except Exception as exc:
+        log.debug("collect_thread: get_messages(%s) fail: %s", reply_to, exc)
         return [cur], False
     if not replied:
+        log.debug("collect_thread: replied %s не найден", reply_to)
         return [cur], False
-    if getattr(replied, "sender_id", None) != bot_id and getattr(replied, "out", False) is not True:
+    if not _is_from_bot(replied, bot_id):
+        # логируем кто реально отправитель для отладки
         try:
             s = await replied.get_sender()
-            if getattr(s, "id", None) != bot_id:
-                return [cur], False
+            sid = getattr(s, "id", None)
         except Exception:
-            return [cur], False
+            sid = getattr(replied, "sender_id", None)
+        log.debug("collect_thread: reply_to %s не от бота (sender_id=%s vs bot_id=%s) — не тред", reply_to, sid, bot_id)
+        return [cur], False
+    # в Избранном (Saved Messages) все сообщения от одного id, отличаем бота по отсутствию триггера
+    # ответы Луны никогда не начинаются с кодового слова
+    replied_text = get_message_text(replied)
+    if is_trigger(replied_text, cfg.trigger) or is_trigger(replied_text, cfg.judge_trigger):
+        log.debug("collect_thread: reply_to %s — это триггер-сообщение, а не ответ Луны — не тред", reply_to)
+        return [cur], False
 
     chain: list = []
     visited: set[int] = set()
@@ -459,22 +511,28 @@ async def collect_thread(event, telegram, bot_id: int, cfg) -> tuple[list, bool]
     node = cur
     while node and depth < 30:
         if node.id in visited:
+            log.debug("collect_thread: цикл на %s", node.id)
             break
         visited.add(node.id)
         chain.append(node)
-        rid = getattr(node, "reply_to_msg_id", None)
+        rid = _get_reply_id(node)
         if not rid:
             break
         try:
             prev = await telegram.get_messages(event.chat_id, ids=rid)
-        except Exception:
+            if isinstance(prev, list):
+                prev = prev[0] if prev else None
+        except Exception as exc:
+            log.debug("collect_thread: walk fail rid=%s: %s", rid, exc)
             break
         if not prev:
+            log.debug("collect_thread: prev %s not found, обрыв", rid)
             break
         node = prev
         depth += 1
 
     chain.reverse()
+    log.debug("collect_thread: собрано %s сообщений: ids=%s", len(chain), [m.id for m in chain])
     first_text = get_message_text(chain[0]) if chain else ""
     if not is_trigger(first_text, cfg.trigger):
         start_idx = None
@@ -484,7 +542,9 @@ async def collect_thread(event, telegram, bot_id: int, cfg) -> tuple[list, bool]
                 break
         if start_idx is not None:
             chain = chain[start_idx:]
+            log.debug("collect_thread: обрезано с %s, осталось %s", start_idx, len(chain))
         else:
+            log.debug("collect_thread: нет триггера в цепочке %s — не тред", [get_message_text(m)[:20] for m in chain])
             return [cur], False
     return chain, True
 
@@ -494,9 +554,8 @@ def format_thread_text(chain, bot_id: int) -> str:
     for m in chain:
         txt = get_message_text(m).strip()
         suffix = " [изображение]" if has_image(m) else ""
-        sender_id = getattr(m, "sender_id", None)
-        is_bot = sender_id == bot_id or bool(getattr(m, "out", False) and sender_id == bot_id)
-        who = "Луна" if is_bot else f"Пользователь({sender_id})"
+        is_bot = _is_from_bot(m, bot_id)
+        who = "Луна" if is_bot else f"Пользователь({getattr(m, 'sender_id', '?')})"
         ts = ""
         if getattr(m, "date", None):
             try:
