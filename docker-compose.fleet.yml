@@ -1,0 +1,62 @@
+# Fleet-шаблон: 2-3 бота на одном VPS, у каждого свой config.json и свой volume.
+# Образ один на всех (версионированный, только pull — сборки на месте нет).
+# Использование:
+#   LUNA_IMAGE=registry/luna:v1.0 docker compose -f docker-compose.fleet.yml up -d
+# Третий слот (luna-c) — резерв под переселения; раскомментируй при нужде.
+#
+# Раскладка на VPS:
+#   clients/a/config.json, clients/b/config.json   (генерирует Fleet Bot)
+
+services:
+  luna-a:
+    image: ${LUNA_IMAGE:-luna:latest}
+    restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      CONFIG_FILE: /app/config.json
+    volumes:
+      - ./clients/a/config.json:/app/config.json:ro
+      - luna_data_a:/app/data
+
+  luna-b:
+    image: ${LUNA_IMAGE:-luna:latest}
+    restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      CONFIG_FILE: /app/config.json
+    volumes:
+      - ./clients/b/config.json:/app/config.json:ro
+      - luna_data_b:/app/data
+
+  # luna-c:
+  #   image: ${LUNA_IMAGE:-luna:latest}
+  #   restart: unless-stopped
+  #   mem_limit: 512m
+  #   mem_reservation: 128m
+  #   logging:
+  #     driver: json-file
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+  #   environment:
+  #     CONFIG_FILE: /app/config.json
+  #   volumes:
+  #     - ./clients/c/config.json:/app/config.json:ro
+  #     - luna_data_c:/app/data
+
+volumes:
+  luna_data_a:
+  luna_data_b:
+  # luna_data_c:

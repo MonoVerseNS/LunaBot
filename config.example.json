@@ -1,0 +1,57 @@
+{
+  "bot_name": "Луна",
+  "trigger": "луна",
+  "character": "luna-classic",
+  "debug": false,
+
+  "telegram": {
+    "api_id": 0,
+    "api_hash": ""
+  },
+
+  "ai": {
+    "gemini_key": "",
+    "gemini_model": "gemini-2.5-flash",
+    "openai_key": "",
+    "openai_base_url": "https://api.openai.com/v1",
+    "openai_model": "gpt-4o-mini"
+  },
+
+  "filters": {
+    "whitelist": [],
+    "blacklist": [],
+    "user_whitelist": [],
+    "ignore_channels": true,
+    "ignore_groups": false
+  },
+
+  "search": {
+    "enabled": true,
+    "max_results": 5,
+    "tavily_key": ""
+  },
+
+  "limits": {
+    "max_reply_words": 250,
+    "allow_self_reply": true,
+    "min_delay_sec": 0.8,
+    "max_delay_sec": 2.5,
+    "per_minute": 6,
+    "daily": 200,
+    "per_chat_per_minute": 3,
+    "per_chat_daily": 50,
+    "max_tokens": 4096
+  },
+
+  "device": {
+    "model": "Desktop",
+    "system": "Windows 11",
+    "app_version": "1.0",
+    "lang": "ru"
+  },
+
+  "paths": {
+    "session": "data/luna_session",
+    "state": "data/luna_state.db"
+  }
+}
